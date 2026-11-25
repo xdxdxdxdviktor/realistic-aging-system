@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="FiveM script, se kterým postavy stárnou podle času a odsezených trestů.">
+<title>Realistic Aging System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,500..900&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: spis postavy — úzký textový sloupec, vedle něj „karta“ se simulátorem; sekce oddělené jako listy spisu */
+:root {
+  --bg: #eef0f2;
+  --paper: #ffffff;
+  --ink: #16202b;
+  --muted: #5a6673;
+  --line: #d3d9df;
+  --accent: #b3372d;
+  --accent-soft: #f4e2df;
+  --ok: #2f7a55;
+  --warn: #b0751a;
+  --display: "Archivo", "Arial Narrow", system-ui, sans-serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11161c; --paper: #18202a; --ink: #e6eaee; --muted: #94a0ad; --line: #2a3542;
+    --accent: #e0675b; --accent-soft: #3a2220; --ok: #5fbf8c; --warn: #e0a64a; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11161c; --paper: #18202a; --ink: #e6eaee; --muted: #94a0ad; --line: #2a3542;
+  --accent: #e0675b; --accent-soft: #3a2220; --ok: #5fbf8c; --warn: #e0a64a; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { color-scheme: light; } body { margin: 0; } img { max-width: 100%; } [hidden] { display: none !important; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--body); font-size: 16px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1080px; margin: 0 auto; }
+h1, h2, h3 { font-family: var(--display); font-stretch: 75%; line-height: 1.05; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(2.6rem, 7vw, 4.6rem); font-weight: 900; text-transform: uppercase; letter-spacing: -0.01em; }
+h2 { font-size: clamp(1.8rem, 4vw, 2.6rem); font-weight: 800; text-transform: uppercase; }
+h3 { font-size: 1.25rem; font-weight: 700; font-stretch: 85%; }
+p { margin: 0; }
+.label { font-family: var(--mono); font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.lead { font-size: 1.15rem; color: var(--muted); max-width: 58ch; }
+section { padding-block: clamp(48px, 8vw, 88px); border-top: 1px solid var(--line); }
+.sec-head { display: grid; gap: 12px; margin-bottom: 32px; max-width: 65ch; }
+.sec-head p { color: var(--muted); }
+
+/* HERO */
+.hero { padding-block: clamp(40px, 7vw, 80px); display: grid; grid-template-columns: 1.1fr 1fr; gap: clamp(28px, 5vw, 56px); align-items: start; }
+.hero > * { min-width: 0; }
+.hero-text { display: grid; gap: 20px; }
+.status { display: inline-flex; gap: 8px; align-items: center; width: fit-content; padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--paper); }
+.status i { width: 8px; height: 8px; border-radius: 50%; background: var(--warn); display: block; }
+h1 em { font-style: normal; color: var(--accent); }
+.facts { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { font-family: var(--mono); font-size: 0.8rem; padding: 4px 10px; border-radius: 4px; background: var(--paper); border: 1px solid var(--line); }
+
+/* simulator card */
+.card { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 24px; display: grid; gap: 20px; box-shadow: 0 1px 0 var(--line), 0 12px 32px -18px rgba(0,0,0,.25); }
+.card-top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.age-num { font-family: var(--display); font-stretch: 62%; font-weight: 900; font-size: 5rem; line-height: 0.9; font-variant-numeric: tabular-nums; }
+.age-num small { font-size: 1.4rem; font-stretch: 75%; color: var(--muted); font-weight: 600; margin-left: 4px; }
+input[type=range] { width: 100%; accent-color: var(--accent); }
+input[type=range]:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.meters { display: grid; gap: 14px; }
+.meter { display: grid; gap: 6px; }
+.meter-row { display: flex; justify-content: space-between; gap: 12px; font-size: 0.9rem; }
+.meter-row b { font-family: var(--mono); font-weight: 500; font-variant-numeric: tabular-nums; }
+.bar { height: 8px; background: var(--bg); border-radius: 4px; overflow: hidden; }
+.bar span { display: block; height: 100%; background: var(--ink); border-radius: 4px; transition: width .25s ease; }
+.bar.red span { background: var(--accent); }
+.verdict { padding: 12px 14px; border-radius: 6px; background: var(--bg); font-size: 0.92rem; }
+.verdict.danger { background: var(--accent-soft); color: var(--ink); }
+.note { font-size: 0.78rem; color: var(--muted); }
+
+/* problem */
+.problem { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: center; }
+.problem > * { min-width: 0; }
+.idcard { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 20px; display: grid; gap: 10px; font-family: var(--mono); font-size: 0.9rem; }
+.idcard .row { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px dashed var(--line); padding-bottom: 8px; }
+.idcard .row:last-child { border-bottom: 0; padding-bottom: 0; }
+.idcard .row span:first-child { color: var(--muted); }
+.strike { text-decoration: line-through; color: var(--muted); }
+.hl { color: var(--accent); font-weight: 500; }
+
+/* timeline */
+.timeline { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); overflow: hidden; }
+.step { padding: 22px; display: grid; gap: 8px; align-content: start; border-right: 1px solid var(--line); }
+.step:last-child { border-right: 0; }
+.step .big { font-family: var(--display); font-stretch: 62%; font-size: 3rem; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; }
+.step p { color: var(--muted); font-size: 0.95rem; }
+.step.mid { background: var(--bg); }
+
+/* lists */
+.grid2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+.grid2 > * { min-width: 0; }
+.item { padding: 18px 20px; border-left: 3px solid var(--ink); background: var(--paper); border-radius: 0 6px 6px 0; display: grid; gap: 6px; }
+.item p { color: var(--muted); font-size: 0.95rem; }
+
+/* effects table */
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); }
+table { width: 100%; border-collapse: collapse; font-size: 0.95rem; min-width: 560px; }
+th, td { text-align: left; padding: 12px 16px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+tr:last-child td { border-bottom: 0; }
+td.mono { white-space: nowrap; }
+.effects-extra { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+
+/* diseases */
+.diseases { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.dz { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 20px; display: grid; gap: 10px; align-content: start; }
+.dz .from { font-family: var(--mono); font-size: 0.8rem; color: var(--accent); }
+.dz dl { margin: 0; display: grid; gap: 6px; font-size: 0.92rem; }
+.dz dt { font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.dz dd { margin: 0; }
+.dz.ems { border-color: var(--accent); }
+.ems-box { background: var(--ink); color: var(--bg); border-radius: 10px; padding: 20px; display: grid; gap: 10px; align-content: center; }
+.ems-box h3 { color: var(--bg); }
+.ems-box p { opacity: .8; font-size: 0.95rem; }
+
+/* roulette */
+.roulette { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; counter-reset: s; }
+.r-step { padding: 20px; border-top: 3px solid var(--line); display: grid; gap: 8px; align-content: start; }
+.r-step:last-child { border-top-color: var(--accent); }
+.r-step .n { font-family: var(--mono); font-size: 0.8rem; color: var(--muted); }
+.r-step p { color: var(--muted); font-size: 0.93rem; }
+.safety { margin-top: 24px; padding: 16px 20px; background: var(--paper); border: 1px solid var(--line); border-radius: 8px; font-size: 0.95rem; }
+
+/* tech */
+.tech { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; }
+.tech > * { min-width: 0; }
+.tech ul { margin: 0; padding-left: 18px; display: grid; gap: 8px; }
+pre { margin: 0; background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 18px; overflow-x: auto; font-family: var(--mono); font-size: 0.85rem; line-height: 1.55; }
+pre .c { color: var(--muted); }
+pre .k { color: var(--accent); }
+
+/* roadmap */
+.road { display: grid; gap: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); overflow: hidden; }
+.road-row { display: grid; grid-template-columns: 120px 1fr auto; gap: 16px; padding: 14px 18px; border-bottom: 1px solid var(--line); align-items: center; }
+.road-row:last-child { border-bottom: 0; }
+.road-row > * { min-width: 0; }
+.pill { font-family: var(--mono); font-size: 0.72rem; padding: 3px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.pill.now { border-color: var(--warn); color: var(--warn); }
+
+/* cta */
+.cta { display: grid; gap: 16px; max-width: 62ch; }
+.cta ol { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+footer { padding-block: 32px 48px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.85rem; }
+
+@media (max-width: 860px) {
+  .hero, .problem, .tech { grid-template-columns: 1fr; }
+  .diseases { grid-template-columns: 1fr 1fr; }
+  .roulette { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 560px) {
+  .timeline, .grid2, .diseases, .roulette { grid-template-columns: 1fr; }
+  .step { border-right: 0; border-bottom: 1px solid var(--line); }
+  .step:last-child { border-bottom: 0; }
+  .road-row { grid-template-columns: 1fr auto; }
+  .road-row .phase { grid-column: 1 / -1; }
+  .age-num { font-size: 4rem; }
+}
+@media (prefers-reduced-motion: reduce) { .bar span { transition: none; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <header class="hero">
+    <div class="hero-text">
+      <span class="status label"><i></i>Ve vývoji · FiveM resource</span>
+      <h1>Realistic <em>Aging</em> System</h1>
+      <p class="lead">Postavy na tvém serveru budou opravdu stárnout. Věk se počítá z času i z odsezených trestů a projeví se na výdrži, zdraví, vzhledu a nakonec i na tom, jak dlouho postava žije.</p>
+      <div class="facts">
+        <span class="chip">ESX</span><span class="chip">QBCore</span><span class="chip">Qbox</span><span class="chip">oxmysql</span><span class="chip">CZ / EN</span>
+      </div>
+    </div>
+
+    <div class="card" aria-label="Simulátor věku">
+      <div class="card-top">
+        <span class="label">Vyzkoušej: věk postavy</span>
+        <span class="label" id="band">18–29 let</span>
+      </div>
+      <div class="age-num"><span id="age">25</span><small>let</small></div>
+      <input type="range" id="ageRange" min="18" max="100" value="25" aria-label="Věk postavy">
+      <div class="meters">
+        <div class="meter">
+          <div class="meter-row"><span>Výdrž při sprintu</span><b id="vStam">100 %</b></div>
+          <div class="bar"><span id="bStam" style="width:100%"></span></div>
+        </div>
+        <div class="meter">
+          <div class="meter-row"><span>Regenerace zdraví</span><b id="vRegen">100 %</b></div>
+          <div class="bar"><span id="bRegen" style="width:100%"></span></div>
+        </div>
+        <div class="meter">
+          <div class="meter-row"><span>Vrásky (vzhled postavy)</span><b id="vWr">0 %</b></div>
+          <div class="bar"><span id="bWr" style="width:0%"></span></div>
+        </div>
+        <div class="meter">
+          <div class="meter-row"><span>Riziko nemocí</span><b id="vDz">žádné</b></div>
+          <div class="bar red"><span id="bDz" style="width:0%"></span></div>
+        </div>
+      </div>
+      <div class="verdict" id="verdict">Běžné fyzické schopnosti. Nic se nemění.</div>
+      <p class="note">Ukázkové hodnoty z výchozího configu. Každý server si je nastaví po svém.</p>
+    </div>
+  </header>
+
+  <section>
+    <div class="problem">
+      <div class="sec-head" style="margin:0">
+        <span class="label">Problém</span>
+        <h2>Stoletý důchodce, který běhá jako dvacetiletý</h2>
+        <p>Na většině serverů dostane postava pár dlouhých trestů a „odsedí“ si desítky let. Věk se ale nikde nezmění, takže člověk, který podle RP strávil půl života za mřížemi, sprintuje po městě, jako by se nic nestalo. Realistic Aging System z věku dělá skutečnou herní hodnotu.</p>
+      </div>
+      <div class="idcard" aria-label="Příklad karty postavy">
+        <div class="row"><span>Postava</span><span>Marcus Hale</span></div>
+        <div class="row"><span>Odsezeno celkem</span><span>78 let</span></div>
+        <div class="row"><span>Věk bez scriptu</span><span class="strike">27 let</span></div>
+        <div class="row"><span>Věk se scriptem</span><span class="hl">105 let</span></div>
+        <div class="row"><span>Výdrž</span><span class="hl">výrazně omezená</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <span class="label">Jak to funguje</span>
+      <h2>Čas plus tresty</h2>
+      <p>Každá postava má datum narození a stárne podle reálného času. Rychlost si server nastaví sám, třeba 1 reálný den = 1 měsíc věku. K tomu se přičítají roky, které postava strávila ve vězení.</p>
+    </div>
+    <div class="timeline">
+      <div class="step"><span class="label">Nástup do vězení</span><span class="big mono">25</span><p>Postava dostane trest za loupež.</p></div>
+      <div class="step mid"><span class="label">Trest</span><span class="big mono">+15</span><p>Věk se připisuje průběžně za každou odsezenou minutu.</p></div>
+      <div class="step"><span class="label">Po propuštění</span><span class="big mono">40</span><p>Postava odchází o 15 let starší a její tělo to pozná.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <span class="label">Vězení</span>
+      <h2>Bez exploitů</h2>
+      <p>Logika věku a trestů běží na serveru. Hráč ji nemůže obejít odpojením, restartem ani cheatem.</p>
+    </div>
+    <div class="grid2">
+      <div class="item"><h3>Počítá se jen odsezené</h3><p>Při útěku, milosti nebo zkrácení trestu se připíše jen čas, který postava ve vězení opravdu strávila.</p></div>
+      <div class="item"><h3>Odpojení nic nezmění</h3><p>Věk přibývá jen tehdy, když vězeňský script hlásí, že hráč sedí. Odpojení nic nepřidá ani neubere.</p></div>
+      <div class="item"><h3>Restart nevadí</h3><p>Každý trest je uložený v databázi a po restartu se pokračuje tam, kde se skončilo.</p></div>
+      <div class="item"><h3>Nic dvakrát</h3><p>Každý trest má vlastní ID. Uzavřený trest se už nikdy znovu nezapočítá.</p></div>
+      <div class="item"><h3>Strop na jeden trest</h3><p>Jeden přestřelený rozsudek postavu nezničí. Maximum let za jeden trest je v configu.</p></div>
+      <div class="item"><h3>Admin jail se nepočítá</h3><p>Admin jail a komunitní práce se do věku nezapočítávají.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <span class="label">Fyzické efekty</span>
+      <h2>Tělo stárne postupně</h2>
+      <p>Efekty se mění plynule, ne skokově. Každý se dá v configu vypnout nebo upravit.</p>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Věk</th><th>Výdrž</th><th>Co hráč pozná</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">18–39</td><td class="mono">100 %</td><td>Běžné fyzické schopnosti</td></tr>
+          <tr><td class="mono">40–49</td><td class="mono">95 %</td><td>Mírně pomalejší regenerace, první vrásky</td></tr>
+          <tr><td class="mono">50–59</td><td class="mono">85 %</td><td>Rychlejší únava při dlouhém běhu</td></tr>
+          <tr><td class="mono">60–69</td><td class="mono">75 %</td><td>Nižší výdrž, delší zotavení po zranění</td></tr>
+          <tr><td class="mono">70+</td><td class="mono">60 %</td><td>Kratší sprint, těžší pohyb při zranění</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="effects-extra">
+      <span class="chip">Vrásky na postavě podle věku</span>
+      <span class="chip">Volitelné šedivění vlasů</span>
+      <span class="chip">Kondice: kdo běhá a cvičí, stárne pomaleji</span>
+      <span class="chip">Biologický věk vedle věku v občance</span>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <span class="label">Nemoci</span>
+      <h2>Čím starší, tím větší riziko</h2>
+      <p>Riziko se vyhodnocuje nejvýš jednou denně a jen když je hráč online. Efekty jsou jemné a dají se zvládnout léčbou. Kupec si do configu může přidat vlastní nemoci.</p>
+    </div>
+    <div class="diseases">
+      <div class="dz"><span class="from">od 45 let</span><h3>Cukrovka</h3><dl><dt>Projev</dt><dd>Slabost, když postava nebere inzulín</dd><dt>Léčba</dt><dd>Inzulín (item)</dd></dl></div>
+      <div class="dz"><span class="from">od 50 let</span><h3>Bolest kloubů</h3><dl><dt>Projev</dt><dd>Občasné kulhání, horší sprint</dd><dt>Léčba</dt><dd>Léky, fyzioterapie</dd></dl></div>
+      <div class="dz"><span class="from">od 55 let</span><h3>Tlak a srdce</h3><dl><dt>Projev</dt><dd>Závratě a rozmazaný obraz při námaze</dd><dt>Léčba</dt><dd>Pravidelné léky, jinak riziko roste</dd></dl></div>
+      <div class="dz"><span class="from">od 60 let</span><h3>Zhoršený zrak</h3><dl><dt>Projev</dt><dd>Jemné rozmazání obrazu</dd><dt>Léčba</dt><dd>Brýle (item)</dd></dl></div>
+      <div class="dz ems"><span class="from">od 60 let</span><h3>Rakovina</h3><dl><dt>Projev</dt><dd>Stádia 1–4, postupné zhoršování</dd><dt>Léčba</dt><dd>Diagnóza a léčba u EMS, 4. stádium může být smrtelné</dd></dl></div>
+      <div class="ems-box"><span class="label" style="color:inherit;opacity:.7">Pro server</span><h3>Nové RP pro EMS a lékárny</h3><p>Diagnózy, předpisy, pravidelné kontroly a léčba. Doktoři mají najednou co dělat i mimo přestřelky.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <span class="label">90+ let</span>
+      <h2>Ruleta</h2>
+      <p>Od 90 let roste šance na smrt postavy, ve výchozím configu z 0,5 % denně v 90 letech na 3 % denně ve 100. Smrt ale nepřijde z ničeho nic.</p>
+    </div>
+    <div class="roulette">
+      <div class="r-step"><span class="n">Krok 1</span><h3>Varování</h3><p>Postava cítí slabost a hráč dostane upozornění. Má čas se s postavou rozloučit.</p></div>
+      <div class="r-step"><span class="n">Krok 2</span><h3>Kolaps</h3><p>Spustí se jen v klidu: ne v autě, ne v akci, ne ve vězení.</p></div>
+      <div class="r-step"><span class="n">Krok 3</span><h3>EMS</h3><p>Doktoři mají omezený čas a šanci postavu zachránit.</p></div>
+      <div class="r-step"><span class="n">Krok 4</span><h3>Smrt postavy</h3><p>Pokud záchrana selže, postava definitivně umírá a nejde za ni dál hrát.</p></div>
+    </div>
+    <p class="safety">Ve výchozím nastavení se postava jen zablokuje a nic se nemaže. Admin ji může v případě chyby vrátit jedním příkazem.</p>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <span class="label">Pro majitele serveru</span>
+      <h2>Nastavíš si všechno</h2>
+    </div>
+    <div class="tech">
+      <ul>
+        <li><b>Automatická detekce frameworku:</b> ESX, QBCore, Qbox, případně vlastní přes bridge.</li>
+        <li><b>Napojení na vězeňský script</b> přes připravené adaptéry, nebo univerzálně přes exporty.</li>
+        <li><b>Inventáře</b> pro léky a brýle: ox_inventory, qb-inventory, ESX itemy.</li>
+        <li><b>Panel postavy:</b> věk, biologický věk, kondice, nemoci, historie trestů.</li>
+        <li><b>Admin panel</b> s úpravou věku, trestů a nemocí a s logem změn.</li>
+        <li><b>Exporty</b> pro občanky, MDT a EMS scripty.</li>
+        <li><b>Migrace:</b> existující postavy převezme podle jejich data narození.</li>
+      </ul>
+<pre><span class="c">-- config.lua (ukázka)</span>
+Config.AgingSpeed = {
+  realDays = <span class="k">1</span>,
+  ageMonths = <span class="k">1</span>,
+}
+
+Config.Prison = {
+  realMinutesPerYear = <span class="k">1</span>,
+  maxYearsPerSentence = <span class="k">30</span>,
+  countAdminJail = <span class="k">false</span>,
+}
+
+Config.Death = {
+  startAge = <span class="k">90</span>,
+  chanceAt90 = <span class="k">0.5</span>,  <span class="c">-- % za den</span>
+  chanceAt100 = <span class="k">3.0</span>,
+  deleteCharacter = <span class="k">false</span>,
+}</pre>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <span class="label">Stav vývoje</span>
+      <h2>Kde jsme</h2>
+      <p>Script je ve fázi návrhu a vývoj právě začíná. Hotové části se budou postupně testovat na serveru.</p>
+    </div>
+    <div class="road">
+      <div class="road-row"><span class="mono phase">Fáze 1</span><span>Datum narození, výpočet věku, databáze, migrace, admin příkazy</span><span class="pill now">teď</span></div>
+      <div class="road-row"><span class="mono phase">Fáze 2</span><span>Napojení na vězení a ochrana proti exploitům</span><span class="pill">další</span></div>
+      <div class="road-row"><span class="mono phase">Fáze 3</span><span>Výdrž, regenerace, sprint a vrásky</span><span class="pill">plán</span></div>
+      <div class="road-row"><span class="mono phase">Fáze 4</span><span>Nemoci, kondice, biologický věk a ruleta 90+</span><span class="pill">plán</span></div>
+      <div class="road-row"><span class="mono phase">Fáze 5</span><span>Panel postavy a admin panel</span><span class="pill">plán</span></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="cta">
+      <span class="label">Chceš to na server?</span>
+      <h2>Buď mezi prvními</h2>
+      <p>Hledám server, kde se script může vyzkoušet a vyladit podle opravdového hraní. Abych ho připravil přesně pro tebe, potřebuju vědět:</p>
+      <ol>
+        <li>Jaký framework na serveru máš (ESX, QBCore, Qbox)?</li>
+        <li>Jaký vězeňský script používáš?</li>
+        <li>Jaký máš inventář?</li>
+        <li>Jak rychle by postavy měly stárnout, aby to sedělo k tomu, jak dlouho u vás postavy žijí?</li>
+      </ol>
+      <p>Napiš mi a domluvíme se na podmínkách.</p>
+    </div>
+  </section>
+
+  <footer>Realistic Aging System · FiveM resource pro GTA V roleplay servery · návrh 2026</footer>
+</div>
+
+<script>
+(function () {
+  var r = document.getElementById('ageRange');
+  function lerp(pts, a) {
+    if (a <= pts[0][0]) return pts[0][1];
+    for (var i = 1; i < pts.length; i++) {
+      if (a <= pts[i][0]) {
+        var p = pts[i - 1], q = pts[i];
+        return p[1] + (q[1] - p[1]) * (a - p[0]) / (q[0] - p[0]);
+      }
+    }
+    return pts[pts.length - 1][1];
+  }
+  var stam = [[39, 100], [40, 95], [50, 85], [60, 75], [70, 60], [100, 45]];
+  var regen = [[39, 100], [50, 85], [70, 65], [100, 45]];
+  var wr = [[30, 0], [40, 20], [60, 60], [80, 100]];
+  var dz = [[44, 0], [50, 15], [60, 35], [70, 55], [80, 75], [100, 95]];
+  function set(id, v, txt) {
+    document.getElementById('b' + id).style.width = v + '%';
+    document.getElementById('v' + id).textContent = txt != null ? txt : Math.round(v) + ' %';
+  }
+  function band(a) {
+    if (a < 30) return '18–29 let'; if (a < 40) return '30–39 let';
+    if (a < 50) return '40–49 let'; if (a < 60) return '50–59 let';
+    if (a < 70) return '60–69 let'; if (a < 90) return '70+ let'; return '90+ let';
+  }
+  function update() {
+    var a = +r.value;
+    document.getElementById('age').textContent = a;
+    document.getElementById('band').textContent = band(a);
+    set('Stam', lerp(stam, a));
+    set('Regen', lerp(regen, a));
+    set('Wr', lerp(wr, a));
+    var d = lerp(dz, a);
+    set('Dz', d, d === 0 ? 'žádné' : d < 30 ? 'nízké' : d < 60 ? 'střední' : 'vysoké');
+    var v = document.getElementById('verdict');
+    v.classList.toggle('danger', a >= 90);
+    if (a >= 90) {
+      var c = (0.5 + (Math.min(a, 100) - 90) * 0.25).toFixed(2).replace('.', ',');
+      v.textContent = 'Ruleta je aktivní: šance na smrt postavy ' + c + ' % za den.';
+    } else if (a >= 70) v.textContent = 'Výraznější fyzická omezení a vysoké riziko nemocí.';
+    else if (a >= 60) v.textContent = 'Nižší výdrž, delší zotavení. Může přijít rakovina nebo horší zrak.';
+    else if (a >= 50) v.textContent = 'Rychlejší únava při dlouhém běhu. Můžou začít bolet klouby.';
+    else if (a >= 40) v.textContent = 'Mírně pomalejší regenerace a první vrásky.';
+    else v.textContent = 'Běžné fyzické schopnosti. Nic se nemění.';
+  }
+  r.addEventListener('input', update);
+  update();
+})();
+</script>
+</body>
+</html>
